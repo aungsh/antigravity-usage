@@ -1,0 +1,63 @@
+{
+  "name": "antigravity-token-usage",
+  "displayName": "Antigravity Token Usage",
+  "description": "Shows Antigravity Token Usage in Activity Bar",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "antigravity-usage-sidebar",
+          "title": "Antigravity Usage",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "antigravity-usage-sidebar": [
+        {
+          "type": "webview",
+          "id": "antigravityUsageView",
+          "name": "Usage Data"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "antigravityUsage.refresh",
+        "title": "Refresh Antigravity Usage",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "antigravityUsage.refresh",
+          "when": "view == antigravityUsageView",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "typescript": "^5.1.3"
+  }
+}

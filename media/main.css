@@ -1,0 +1,132 @@
+body {
+    font-family: var(--vscode-font-family);
+    color: var(--vscode-foreground);
+    background-color: var(--vscode-editor-background);
+    padding: 10px;
+    margin: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+h2 {
+    margin: 0 0 4px 0;
+    font-size: 1.1em;
+    font-weight: 600;
+    color: var(--vscode-sideBarTitle-foreground);
+}
+
+.card {
+    background-color: var(--vscode-editorWidget-background);
+    border: 1px solid var(--vscode-widget-border);
+    border-radius: 4px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.card-title {
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+.card-status {
+    font-size: 0.85em;
+    font-weight: bold;
+}
+
+.card-status.safe {
+    color: var(--vscode-testing-iconPassed);
+}
+
+.card-status.danger {
+    color: var(--vscode-testing-iconFailed);
+}
+
+.progress-bar-bg {
+    width: 100%;
+    height: 6px;
+    background-color: var(--vscode-progressBar-background);
+    border-radius: 3px;
+    overflow: hidden;
+    opacity: 0.3;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background-color: var(--vscode-button-background);
+    border-radius: 3px;
+    transition: width 0.3s ease-in-out;
+}
+
+.progress-container {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background-color: var(--vscode-editorWidget-border);
+}
+
+.progress-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background-color: var(--vscode-button-background);
+    border-radius: 3px;
+    transition: width 0.3s ease-in-out;
+}
+
+.card-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8em;
+    color: var(--vscode-descriptionForeground);
+}
+
+.card-stats strong {
+    color: var(--vscode-foreground);
+    font-weight: 600;
+}
+
+.info-text {
+    font-size: 0.8em;
+    color: var(--vscode-descriptionForeground);
+    text-align: center;
+    margin-top: 8px;
+}
+
+.group-container {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--vscode-editorGroup-border);
+}
+
+.group-container:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+h3 {
+    margin: 0 0 4px 0;
+    font-size: 1.05em;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--vscode-foreground);
+    letter-spacing: 0.5px;
+}
+
+.model-list {
+    font-size: 0.85em;
+    color: var(--vscode-descriptionForeground);
+    margin: 0 0 12px 0;
+}
