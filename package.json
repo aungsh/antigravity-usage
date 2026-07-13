@@ -3,6 +3,12 @@
   "displayName": "Antigravity Token Usage",
   "description": "Shows Antigravity Token Usage in Activity Bar",
   "version": "0.0.1",
+  "icon": "media/store-icon.png",
+  "publisher": "aungsh2003",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aungsh2003/antigravity-usage.git"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
