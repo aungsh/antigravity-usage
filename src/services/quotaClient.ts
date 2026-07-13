@@ -1,10 +1,12 @@
 /**
+ * Adapted from https://github.com/Henrik-3/AntigravityQuota (MIT License)
+ * 
  * Quota client — fetches quota data from the local Antigravity Language Server
  * or falls back to mock data for development.
  */
 
-import { ConnectionInfo, ExtensionConfig, ModelQuota, QuotaSnapshot, QuotaStatus, SubscriptionTier, PromptCredits } from '../types';
-import { ConnectClient, ParsedQuotaData } from './connectClient';
+import { ConnectionInfo, ExtensionConfig, ModelQuota, QuotaSnapshot, QuotaStatus, SubscriptionTier, PromptCredits, ServerUserStatusResponse } from '../types';
+import { ConnectClient } from './connectClient';
 import { getQuotaStatus } from '../utils/formatting';
 
 export class QuotaClient {
@@ -32,36 +34,71 @@ export class QuotaClient {
             const protocol = connection.isHttps ? 'https' : 'http';
             const baseUrl = `${protocol}://127.0.0.1:${connection.port}`;
             const data = await this.connectClient.getUserStatus(baseUrl, connection.authToken);
-            return this.mapToSnapshot(data, config);
+            return this.parseResponse(data, config);
         } catch (error) {
             console.error('[Antigravity Usage Monitor] Connect RPC error:', error);
             return this.getDisconnectedSnapshot();
         }
     }
 
-    /**
-     * Map the parsed Connect RPC response to our QuotaSnapshot format.
-     */
-    private mapToSnapshot(data: ParsedQuotaData, config: ExtensionConfig): QuotaSnapshot {
-        const models: ModelQuota[] = data.models.map((m) => {
-            const usedFraction = 1 - m.remainingFraction;
+    private getQuotaInfo(model: any): any | undefined {
+        return model.quotaInfo ?? model.quota_info;
+    }
+
+    private parseResponse(data: ServerUserStatusResponse, config: ExtensionConfig): QuotaSnapshot {
+        const userStatus = data.userStatus;
+        if (!userStatus) {
+            return this.getDisconnectedSnapshot();
+        }
+
+        const planInfo = userStatus.planStatus?.planInfo;
+        const availableCredits = userStatus.planStatus?.availablePromptCredits;
+
+        let promptCredits: PromptCredits | undefined;
+
+        if (planInfo && availableCredits !== undefined) {
+            const monthly = Number(planInfo.monthlyPromptCredits);
+            const available = Number(availableCredits);
+            if (monthly > 0) {
+                promptCredits = {
+                    available: available,
+                    limit: monthly,
+                    used: monthly - available,
+                    remaining: available
+                } as PromptCredits;
+            }
+        }
+
+        const rawModels = userStatus.cascadeModelConfigData?.clientModelConfigs || [];
+
+        const models: ModelQuota[] = rawModels.map((m: any) => {
+            const quotaInfo = this.getQuotaInfo(m);
+            const resetTimeRaw = quotaInfo?.resetTime ?? quotaInfo?.reset_time;
+            const resetTime = resetTimeRaw ? new Date(resetTimeRaw) : new Date(0);
+            const now = new Date();
+            const timeUntilResetMs = resetTime.getTime() - now.getTime();
+            
+            const remainingFraction = quotaInfo?.remainingFraction ?? quotaInfo?.remaining_fraction ?? 1.0;
+            const isExhausted = m.isExhausted ?? (remainingFraction === 0);
+            
+            const usedFraction = 1 - remainingFraction;
             const percentUsed = Math.round(usedFraction * 100);
-            // We don't get absolute used/limit from the API, just fractions.
-            // Use 100 as a normalized limit so progress bars work.
-            const limit = 100;
-            const used = percentUsed;
 
             return {
-                modelId: m.modelId,
-                modelName: m.label,
-                used,
-                limit,
+                modelId: m.modelOrAlias?.model ?? m.model_or_alias?.model ?? 'unknown',
+                modelName: m.label ?? m.displayName ?? 'Unknown',
+                used: percentUsed,
+                limit: 100,
                 percentUsed,
-                resetTimestamp: m.resetTime ? new Date(m.resetTime).getTime() : 0,
-                remainingFraction: m.remainingFraction,
-                isExhausted: m.isExhausted,
+                resetTimestamp: resetTime.getTime(),
+                remainingFraction,
+                isExhausted,
+                timeUntilResetMs: timeUntilResetMs > 0 ? timeUntilResetMs : 0
             };
         });
+
+        // Sort models by name
+        models.sort((a, b) => a.modelName.localeCompare(b.modelName));
 
         // Overall usage: average of all models
         const overallPercent = models.length > 0
@@ -72,15 +109,11 @@ export class QuotaClient {
 
         // Determine subscription tier
         let tier = SubscriptionTier.UNKNOWN;
-        if (data.tierName) {
-            if (data.tierName.includes('Ultra')) { tier = SubscriptionTier.ULTRA; }
-            else if (data.tierName.includes('Pro')) { tier = SubscriptionTier.PRO; }
-            else if (data.tierName.includes('Free')) { tier = SubscriptionTier.FREE; }
-        }
-
-        let promptCredits: PromptCredits | undefined;
-        if (data.promptCredits) {
-            promptCredits = data.promptCredits;
+        const tierName = planInfo?.planName || planInfo?.teamsTier;
+        if (tierName) {
+            if (tierName.includes('Ultra')) { tier = SubscriptionTier.ULTRA; }
+            else if (tierName.includes('Pro')) { tier = SubscriptionTier.PRO; }
+            else if (tierName.includes('Free')) { tier = SubscriptionTier.FREE; }
         }
 
         return {
@@ -90,7 +123,7 @@ export class QuotaClient {
             lastUpdated: Date.now(),
             subscriptionTier: tier,
             promptCredits,
-            email: data.email,
+            email: userStatus.email,
             source: 'local',
         };
     }
@@ -126,6 +159,8 @@ export class QuotaClient {
                 percentUsed: 37,
                 resetTimestamp: resetIn4h,
                 remainingFraction: 0.63,
+                isExhausted: false,
+                timeUntilResetMs: 4 * 60 * 60 * 1000
             },
             {
                 modelId: 'gemini-3-pro-low',
@@ -135,6 +170,8 @@ export class QuotaClient {
                 percentUsed: 12,
                 resetTimestamp: resetIn4h,
                 remainingFraction: 0.88,
+                isExhausted: false,
+                timeUntilResetMs: 4 * 60 * 60 * 1000
             },
             {
                 modelId: 'gemini-3-flash',
@@ -144,6 +181,8 @@ export class QuotaClient {
                 percentUsed: 5,
                 resetTimestamp: resetIn4h,
                 remainingFraction: 0.95,
+                isExhausted: false,
+                timeUntilResetMs: 4 * 60 * 60 * 1000
             },
             {
                 modelId: 'claude-sonnet-4.5',
@@ -153,6 +192,8 @@ export class QuotaClient {
                 percentUsed: 62,
                 resetTimestamp: resetIn2h,
                 remainingFraction: 0.38,
+                isExhausted: false,
+                timeUntilResetMs: 2 * 60 * 60 * 1000
             },
             {
                 modelId: 'claude-sonnet-4.5-thinking',
@@ -162,6 +203,8 @@ export class QuotaClient {
                 percentUsed: 78,
                 resetTimestamp: resetIn2h,
                 remainingFraction: 0.22,
+                isExhausted: false,
+                timeUntilResetMs: 2 * 60 * 60 * 1000
             },
             {
                 modelId: 'claude-opus-4.5-thinking',
@@ -172,6 +215,7 @@ export class QuotaClient {
                 resetTimestamp: resetIn2h,
                 remainingFraction: 0.09,
                 isExhausted: false,
+                timeUntilResetMs: 2 * 60 * 60 * 1000
             },
             {
                 modelId: 'claude-opus-4.6-thinking',
@@ -181,6 +225,8 @@ export class QuotaClient {
                 percentUsed: 45,
                 resetTimestamp: resetIn2h,
                 remainingFraction: 0.55,
+                isExhausted: false,
+                timeUntilResetMs: 2 * 60 * 60 * 1000
             },
             {
                 modelId: 'gpt-oss-120b',
@@ -190,6 +236,8 @@ export class QuotaClient {
                 percentUsed: 20,
                 resetTimestamp: resetIn4h,
                 remainingFraction: 0.80,
+                isExhausted: false,
+                timeUntilResetMs: 4 * 60 * 60 * 1000
             },
         ];
 

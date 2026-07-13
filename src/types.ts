@@ -1,4 +1,6 @@
 /**
+ * Adapted from https://github.com/Henrik-3/AntigravityQuota (MIT License)
+ * 
  * Type definitions for Antigravity Usage Monitor
  */
 
@@ -11,9 +13,11 @@ export interface ModelQuota {
     percentUsed: number;
     resetTimestamp: number; // Unix timestamp in milliseconds
     /** Fraction of quota remaining (0.0–1.0), from Connect RPC */
-    remainingFraction?: number;
+    remainingFraction: number;
     /** Whether the model is fully exhausted */
-    isExhausted?: boolean;
+    isExhausted: boolean;
+    /** Time until the quota resets, in milliseconds */
+    timeUntilResetMs?: number;
 }
 
 /** Prompt credits (account-level usage) */
@@ -38,7 +42,7 @@ export interface ConnectionInfo {
     authToken: string;
     pid: number;
     /** Whether the connection uses HTTPS */
-    isHttps: boolean;
+    isHttps?: boolean;
 }
 
 /** Extension configuration from user settings */
@@ -71,4 +75,28 @@ export enum SubscriptionTier {
     PRO = 'Google AI Pro',
     ULTRA = 'Google AI Ultra',
     UNKNOWN = 'Unknown',
+}
+
+// ---------------------------------------------------------
+// Raw Server API Types (adapted from AntigravityQuota)
+// ---------------------------------------------------------
+
+export interface ServerUserStatusResponse {
+    userStatus: {
+        name?: string;
+        email?: string;
+        planStatus?: {
+            planInfo?: {
+                teamsTier?: string;
+                planName?: string;
+                monthlyPromptCredits?: number;
+                monthlyFlowCredits?: number;
+            };
+            availablePromptCredits?: number;
+            availableFlowCredits?: number;
+        };
+        cascadeModelConfigData?: {
+            clientModelConfigs?: any[]; // Mapped to raw model configs
+        };
+    };
 }

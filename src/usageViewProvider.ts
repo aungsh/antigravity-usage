@@ -99,38 +99,33 @@ export class AntigravityUsageProvider implements vscode.WebviewViewProvider {
         // The API returns models grouped by the current cascade Model Config Data.
         // But for our UI, we want to maintain the "Groups" look. 
         // Let's separate Gemini vs Claude as the user requested if they exist.
-        const geminiModels = usageData.models.filter((m: any) => m.modelId.toLowerCase().includes('gemini'));
-        const claudeModels = usageData.models.filter((m: any) => m.modelId.toLowerCase().includes('claude') || m.modelId.toLowerCase().includes('gpt'));
+        const geminiModels = usageData.models.filter((m: any) => m.modelName.toLowerCase().includes('gemini'));
+        const claudeModels = usageData.models.filter((m: any) => m.modelName.toLowerCase().includes('claude') || m.modelName.toLowerCase().includes('gpt'));
         
         const renderGroup = (name: string, models: any[]) => {
             if (models.length === 0) return '';
             
-            // Just use the first model's reset time since they share buckets
-            const sampleModel = models[0];
-            const remainingPercent = (sampleModel.remainingFraction * 100).toFixed(2);
-            const usedPercent = Math.min(100, (1 - sampleModel.remainingFraction) * 100);
-            
-            // To emulate the 5-hour and Weekly limits look we had, we would need bucket-level data.
-            // But the reference API only returns one `remainingFraction` per model.
-            // We will just show "Usage Limit" for the model group.
-            const modelNames = models.map((m: any) => m.modelName || m.label).join(', ');
-
-            return `
-    <div class="group-container">
-        <h3>${name}</h3>
-        <p class="model-list">Models: ${modelNames}</p>
-        
-        <div class="limit-label">
-            <span>Usage Limit</span>
-            <span class="percentage ${usedPercent > 80 ? 'danger' : 'safe'}">${remainingPercent}% remaining</span>
+            const modelsHtml = models.map((model: any) => {
+                const remainingPercent = (model.remainingFraction * 100).toFixed(2);
+                const usedPercent = Math.min(100, (1 - model.remainingFraction) * 100);
+                
+                return `
+        <div class="limit-label" style="margin-top: 12px; font-weight: 500;">
+            <span>${model.modelName || model.label}</span>
         </div>
         <div class="progress-container">
             <div class="progress-fill" style="width: ${usedPercent}%;"></div>
         </div>
         <div class="progress-details">
-            <span>${sampleModel.isExhausted ? 'Exhausted' : 'Active'}</span>
-            <span>Refreshes in: ${this.formatTimeUntil(sampleModel.timeUntilResetMs)}</span>
-        </div>
+            <span class="percentage ${usedPercent > 80 ? 'danger' : 'safe'}">${remainingPercent}% remaining</span>
+            <span>· Refreshes in ${this.formatTimeUntil(model.timeUntilResetMs)}</span>
+        </div>`;
+            }).join('');
+
+            return `
+    <div class="group-container">
+        <h3>${name.toUpperCase()}</h3>
+        ${modelsHtml}
     </div>`;
         };
 
@@ -138,7 +133,7 @@ export class AntigravityUsageProvider implements vscode.WebviewViewProvider {
         groupsHtml += renderGroup('Claude and GPT Models', claudeModels);
         
         // If neither matched (or there are leftovers), render them in an "Other Models" group
-        const otherModels = usageData.models.filter((m: any) => !m.modelId.toLowerCase().includes('gemini') && !m.modelId.toLowerCase().includes('claude') && !m.modelId.toLowerCase().includes('gpt'));
+        const otherModels = usageData.models.filter((m: any) => !m.modelName.toLowerCase().includes('gemini') && !m.modelName.toLowerCase().includes('claude') && !m.modelName.toLowerCase().includes('gpt'));
         groupsHtml += renderGroup('Other Models', otherModels);
 
         return `<!DOCTYPE html>
