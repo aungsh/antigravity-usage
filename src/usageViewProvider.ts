@@ -114,7 +114,7 @@ export class AntigravityUsageProvider implements vscode.WebviewViewProvider {
             <span>${model.modelName || model.label}</span>
         </div>
         <div class="progress-container">
-            <div class="progress-fill" style="width: ${usedPercent}%;"></div>
+            <div class="progress-fill" style="width: ${remainingPercent}%;"></div>
         </div>
         <div class="progress-details">
             <span class="percentage ${usedPercent > 80 ? 'danger' : 'safe'}">${remainingPercent}% remaining</span>
@@ -149,8 +149,9 @@ export class AntigravityUsageProvider implements vscode.WebviewViewProvider {
     
     ${usageData.status === 'disconnected' ? '<div class="info-text">Not connected to Language Server. Is Antigravity running?</div>' : groupsHtml}
 
-    <div class="info-text">
-        * Data fetched live from local Antigravity Language Server RPC.
+    <div class="info-text" style="font-size: 0.9em; opacity: 0.8; margin-top: 20px;">
+        <p style="margin-bottom: 4px;"><strong>* Note on Accuracy</strong></p>
+        <p style="margin-top: 0;">Data is fetched locally from the Antigravity Language Server. The local server caches your usage and syncs with the cloud every 5-10 minutes. Values shown here may trail behind your exact live usage.</p>
     </div>
 </body>
 </html>`;
