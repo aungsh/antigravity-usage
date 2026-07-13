@@ -99,32 +99,28 @@ export class AntigravityUsageProvider implements vscode.WebviewViewProvider {
         <h3>${group.name}</h3>
         <p class="model-list">Models: ${group.models}</p>
         
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">5-Hour Limit</span>
-                <span class="card-status ${fiveHourUsedPercent > 80 ? 'danger' : 'safe'}">${fiveHourRemainingPercent}% remaining</span>
-            </div>
-            <div class="progress-container">
-                <div class="progress-fill" style="width: ${fiveHourUsedPercent}%;"></div>
-            </div>
-            <div class="card-stats">
-                <span>Used: <strong>${group.fiveHourTokensUsed.toLocaleString()}</strong></span>
-                <span>Left: <strong>${fiveHourRemaining.toLocaleString()}</strong></span>
-            </div>
+        <div class="limit-label">
+            <span>5-Hour Limit</span>
+            <span class="percentage ${fiveHourUsedPercent > 80 ? 'danger' : 'safe'}">${fiveHourRemainingPercent}%</span>
+        </div>
+        <div class="progress-container">
+            <div class="progress-fill" style="width: ${fiveHourUsedPercent}%;"></div>
+        </div>
+        <div class="progress-details">
+            <span>Tokens: ${group.fiveHourTokensUsed.toLocaleString()} / ${group.fiveHourTokensLimit.toLocaleString()}</span>
+            <span>Refreshes in: ${group.fiveHourRefreshesIn || 'N/A'}</span>
         </div>
 
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">Weekly Limit</span>
-                <span class="card-status ${weeklyUsedPercent > 80 ? 'danger' : 'safe'}">${weeklyRemainingPercent}% remaining</span>
-            </div>
-            <div class="progress-container">
-                <div class="progress-fill" style="width: ${weeklyUsedPercent}%;"></div>
-            </div>
-            <div class="card-stats">
-                <span>Used: <strong>${group.weeklyTokensUsed.toLocaleString()}</strong></span>
-                <span>Left: <strong>${weeklyRemaining.toLocaleString()}</strong></span>
-            </div>
+        <div class="limit-label">
+            <span>Weekly Limit</span>
+            <span class="percentage ${weeklyUsedPercent > 80 ? 'danger' : 'safe'}">${weeklyRemainingPercent}%</span>
+        </div>
+        <div class="progress-container">
+            <div class="progress-fill" style="width: ${weeklyUsedPercent}%;"></div>
+        </div>
+        <div class="progress-details">
+            <span>Tokens: ${group.weeklyTokensUsed.toLocaleString()} / ${group.weeklyTokensLimit.toLocaleString()}</span>
+            <span>Refreshes in: ${group.weeklyRefreshesIn || 'N/A'}</span>
         </div>
     </div>`;
         }
