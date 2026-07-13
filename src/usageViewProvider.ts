@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { ProcessDetector } from './services/processDetector';
+import { QuotaClient } from './services/quotaClient';
+import { ExtensionConfig } from './types';
 
 export class AntigravityUsageProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'antigravityUsageView';
     private _view?: vscode.WebviewView;
+    private detector = new ProcessDetector();
+    private client = new QuotaClient();
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -25,105 +27,119 @@ export class AntigravityUsageProvider implements vscode.WebviewViewProvider {
             ]
         };
 
-        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+        // Render initial loading state, then fetch data
+        webviewView.webview.html = this.getLoadingHtml(webviewView.webview);
+        this.updateData();
     }
 
-    public refresh() {
+    public async refresh() {
         if (this._view) {
-            this._view.webview.html = this._getHtmlForWebview(this._view.webview);
+            this._view.webview.html = this.getLoadingHtml(this._view.webview);
+            this.detector.invalidateCache();
+            await this.updateData();
         }
     }
 
-    private getUsageData() {
-        const defaultData = {
-            groups: [
-                {
-                    name: "Gemini Models",
-                    models: "Gemini Flash, Gemini Pro",
-                    weeklyTokensUsed: 0,
-                    weeklyTokensLimit: 100000,
-                    fiveHourTokensUsed: 0,
-                    fiveHourTokensLimit: 20000
-                },
-                {
-                    name: "Claude and GPT Models",
-                    models: "Claude Opus, Claude Sonnet, GPT-OSS",
-                    weeklyTokensUsed: 0,
-                    weeklyTokensLimit: 100000,
-                    fiveHourTokensUsed: 0,
-                    fiveHourTokensLimit: 20000
-                }
-            ]
-        };
-
+    private async updateData() {
+        if (!this._view) return;
         try {
-            const configPath = path.join(os.homedir(), '.gemini', 'antigravity-usage.json');
-            if (fs.existsSync(configPath)) {
-                const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-                if (data.groups) {
-                    return data;
-                } else {
-                    return {
-                        groups: [
-                            {
-                                name: "Gemini Models",
-                                models: "Legacy Data",
-                                ...data
-                            }
-                        ]
-                    };
-                }
-            }
+            const config: ExtensionConfig = {
+                pollingInterval: 60000,
+                warningThreshold: 80,
+                criticalThreshold: 90,
+                enableNotifications: false,
+                enableMockData: false
+            };
+            const connection = await this.detector.detect();
+            const data = await this.client.fetchQuota(connection, config);
+            this._view.webview.html = this.getHtmlForWebview(this._view.webview, data);
         } catch (e) {
-            console.error('Failed to read usage data', e);
+            console.error('Failed to update data', e);
+            if (this._view) {
+                this._view.webview.html = `<h2>Error loading quota</h2><p>${e}</p>`;
+            }
         }
-        return defaultData;
     }
 
-    private _getHtmlForWebview(webview: vscode.Webview) {
+    private formatTimeUntil(ms?: number) {
+        if (!ms) return 'N/A';
+        const hours = Math.floor(ms / (1000 * 60 * 60));
+        const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+        if (hours > 24) {
+            const days = Math.floor(hours / 24);
+            const rHours = hours % 24;
+            return `${days}d ${rHours}h`;
+        }
+        return `${hours}h ${minutes}m`;
+    }
+
+    private getLoadingHtml(webview: vscode.Webview) {
         const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.css'));
-        const usageData = this.getUsageData();
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="${styleUri}" rel="stylesheet">
+    <title>Antigravity Usage</title>
+</head>
+<body>
+    <h2>Antigravity Quota</h2>
+    <div class="info-text">Fetching live data from language server...</div>
+</body>
+</html>`;
+    }
+
+    private getHtmlForWebview(webview: vscode.Webview, usageData: any) {
+        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'main.css'));
 
         let groupsHtml = '';
-        for (const group of usageData.groups) {
-            const weeklyRemainingPercent = (Math.max(0, 100 - (group.weeklyTokensUsed / group.weeklyTokensLimit) * 100)).toFixed(2);
-            const fiveHourRemainingPercent = (Math.max(0, 100 - (group.fiveHourTokensUsed / group.fiveHourTokensLimit) * 100)).toFixed(2);
-            const weeklyUsedPercent = Math.min(100, (group.weeklyTokensUsed / group.weeklyTokensLimit) * 100);
-            const fiveHourUsedPercent = Math.min(100, (group.fiveHourTokensUsed / group.fiveHourTokensLimit) * 100);
+        
+        // Group models intelligently based on tier if possible, or just list them all.
+        // The API returns models grouped by the current cascade Model Config Data.
+        // But for our UI, we want to maintain the "Groups" look. 
+        // Let's separate Gemini vs Claude as the user requested if they exist.
+        const geminiModels = usageData.models.filter((m: any) => m.modelId.toLowerCase().includes('gemini'));
+        const claudeModels = usageData.models.filter((m: any) => m.modelId.toLowerCase().includes('claude') || m.modelId.toLowerCase().includes('gpt'));
+        
+        const renderGroup = (name: string, models: any[]) => {
+            if (models.length === 0) return '';
+            
+            // Just use the first model's reset time since they share buckets
+            const sampleModel = models[0];
+            const remainingPercent = (sampleModel.remainingFraction * 100).toFixed(2);
+            const usedPercent = Math.min(100, (1 - sampleModel.remainingFraction) * 100);
+            
+            // To emulate the 5-hour and Weekly limits look we had, we would need bucket-level data.
+            // But the reference API only returns one `remainingFraction` per model.
+            // We will just show "Usage Limit" for the model group.
+            const modelNames = models.map((m: any) => m.modelName || m.label).join(', ');
 
-            const weeklyRemaining = group.weeklyTokensLimit - group.weeklyTokensUsed;
-            const fiveHourRemaining = group.fiveHourTokensLimit - group.fiveHourTokensUsed;
-
-            groupsHtml += `
+            return `
     <div class="group-container">
-        <h3>${group.name}</h3>
-        <p class="model-list">Models: ${group.models}</p>
+        <h3>${name}</h3>
+        <p class="model-list">Models: ${modelNames}</p>
         
         <div class="limit-label">
-            <span>5-Hour Limit</span>
-            <span class="percentage ${fiveHourUsedPercent > 80 ? 'danger' : 'safe'}">${fiveHourRemainingPercent}%</span>
+            <span>Usage Limit</span>
+            <span class="percentage ${usedPercent > 80 ? 'danger' : 'safe'}">${remainingPercent}% remaining</span>
         </div>
         <div class="progress-container">
-            <div class="progress-fill" style="width: ${fiveHourUsedPercent}%;"></div>
+            <div class="progress-fill" style="width: ${usedPercent}%;"></div>
         </div>
         <div class="progress-details">
-            <span>Tokens: ${group.fiveHourTokensUsed.toLocaleString()} / ${group.fiveHourTokensLimit.toLocaleString()}</span>
-            <span>Refreshes in: ${group.fiveHourRefreshesIn || 'N/A'}</span>
-        </div>
-
-        <div class="limit-label">
-            <span>Weekly Limit</span>
-            <span class="percentage ${weeklyUsedPercent > 80 ? 'danger' : 'safe'}">${weeklyRemainingPercent}%</span>
-        </div>
-        <div class="progress-container">
-            <div class="progress-fill" style="width: ${weeklyUsedPercent}%;"></div>
-        </div>
-        <div class="progress-details">
-            <span>Tokens: ${group.weeklyTokensUsed.toLocaleString()} / ${group.weeklyTokensLimit.toLocaleString()}</span>
-            <span>Refreshes in: ${group.weeklyRefreshesIn || 'N/A'}</span>
+            <span>${sampleModel.isExhausted ? 'Exhausted' : 'Active'}</span>
+            <span>Refreshes in: ${this.formatTimeUntil(sampleModel.timeUntilResetMs)}</span>
         </div>
     </div>`;
-        }
+        };
+
+        groupsHtml += renderGroup('Gemini Models', geminiModels);
+        groupsHtml += renderGroup('Claude and GPT Models', claudeModels);
+        
+        // If neither matched (or there are leftovers), render them in an "Other Models" group
+        const otherModels = usageData.models.filter((m: any) => !m.modelId.toLowerCase().includes('gemini') && !m.modelId.toLowerCase().includes('claude') && !m.modelId.toLowerCase().includes('gpt'));
+        groupsHtml += renderGroup('Other Models', otherModels);
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -136,10 +152,10 @@ export class AntigravityUsageProvider implements vscode.WebviewViewProvider {
 <body>
     <h2>Antigravity Quota</h2>
     
-    ${groupsHtml}
+    ${usageData.status === 'disconnected' ? '<div class="info-text">Not connected to Language Server. Is Antigravity running?</div>' : groupsHtml}
 
     <div class="info-text">
-        * Data is fetched locally for least impact. Uses ~/.gemini/antigravity-usage.json.
+        * Data fetched live from local Antigravity Language Server RPC.
     </div>
 </body>
 </html>`;
